@@ -58,7 +58,7 @@ Training takes from about 10 hours for USPTO-50k to about 60 hours for USPTO-FUL
 
 ### Evaluation
 ```
-python bin/eval.py models/uspto_50k --beam-size 50--show-every 100
+python bin/eval.py models/uspto_50k --beam-size 50 --show-every 100
 python bin/eval.py models/uspto_50k_rt --beam-size 50 --show-every 100
 python bin/eval.py models/uspto_mit_mix --beam-size 10 --show-every 1000
 python bin/eval.py models/uspto_mit_sep --beam-size 10 --show-every 1000
@@ -69,3 +69,7 @@ For evaluation script we use `argh`, so `_` in parameter names are replaced with
 Evaluation can take long time, especially for large beam sizes (up to a couple of hours for USPTO-FULL with beam size 50).
 
 Evaluation produces two files: `eval_*.txt` has calculated Top K values, `pred_*.txt` contains predicted SMILES and actions
+
+### Packed data and models
+
+We include packed pre-processed data, as well as weights of the model trained on USPTO-50k for two variants (reaction type unknown/reaction type given) as a GitHub Release with version number v1.0 in this repo. To use data and pretrained models, unpack the "megan_data.zip" archive in the root directory of the project.
