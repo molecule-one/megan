@@ -1,0 +1,40 @@
+# USPTO-MIT (forward synthesis) - "mixed"
+get_dataset.dataset_key = 'uspto_mit'
+
+train_megan.featurizer_key = 'megan_for_8_dfs_cano'
+train_megan.max_n_epochs = 200
+train_megan.train_samples_per_epoch = 20000
+train_megan.valid_samples_per_epoch = 5000
+train_megan.batch_size = 4
+train_megan.learning_rate = 0.0001
+train_megan.gen_lr_factor = 0.05
+train_megan.gen_lr_patience = 6
+train_megan.early_stopping = 16
+train_megan.start_epoch = 0
+train_megan.megan_warmup_epochs = 1
+
+Megan.reaction_type_given = False
+Megan.bond_emb_dim = 32
+Megan.hidden_dim = 1024
+Megan.stateful = True
+Megan.n_reaction_types = 10
+Megan.reaction_type_emb_dim = 16
+
+Megan.atom_feature_keys = ['is_supernode', 'atomic_num', 'formal_charge', 'chiral_tag',
+                           'num_explicit_hs', 'is_aromatic']
+Megan.bond_feature_keys = ['bond_type', 'bond_stereo']
+
+MeganEncoder.n_encoder_conv = 6
+MeganEncoder.enc_residual = True
+MeganEncoder.enc_dropout = 0.0
+
+MeganDecoder.n_decoder_conv = 2
+MeganDecoder.dec_residual = True
+MeganDecoder.n_fc = 2
+MeganDecoder.atom_fc_hidden_dim = 128
+MeganDecoder.bond_fc_hidden_dim = 128
+MeganDecoder.bond_atom_dim = 128
+MeganDecoder.dec_dropout = 0.0
+
+MultiHeadGraphConvLayer.att_heads = 8
+MultiHeadGraphConvLayer.att_dim = 128
