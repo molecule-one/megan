@@ -13,6 +13,7 @@ Pytorch is used for building, training and evaluating models. CUDA support is re
 
 Tensorflow is used only for visualizing training process (tensorboard). CUDA support is not required.
 
+
 ### Environment setup
 We recommend running MEGAN in an isolated conda environment, which can be created with:
 
@@ -22,10 +23,25 @@ Edit `env.sh` file so it suits your configuration, if necessary. Before running 
 
 `source env.sh`
 
-This activates the conda environment and sets a few environmental values.
+This activates the conda environment and sets a few environment values.
 
+
+### Download training/evaluation data
+For USPTO-50k, the data needs to be first manually downloaded from:
+https://www.dropbox.com/sh/6ideflxcakrak10/AAAESdZq7Y0aNGWQmqCEMlcza/typed_schneider50k
+and unpacked to the `data/uspto_50k` folder
+(Thanks to the authors of https://github.com/Hanjun-Dai/GLN for providing the data).
+
+The following scripts download the datasets and generate train/val/test split:
+```
+python bin/acquire.py uspto_50k  # assumes that raw data is in data/uspto_50k
+python bin/acquire.py uspto_mit
+python bin/acquire.py uspto_full
+```
 
 ### Preprocessing training data
+The following scripts build graph representation of data needed to train MEGAN:
+
 ```
 python bin/featurize.py uspto_50k megan_16_bfs_randat
 python bin/featurize.py uspto_mit megan_for_8_dfs_cano
@@ -68,8 +84,8 @@ python bin/eval.py models/uspto_full --beam-size 50 --show-every 1000
 For evaluation script we use `argh`, so `_` in parameter names are replaced with `-`.
 Evaluation can take long time, especially for large beam sizes (up to a couple of hours for USPTO-FULL with beam size 50).
 
-Evaluation produces two files: `eval_*.txt` has calculated Top K values, `pred_*.txt` contains predicted SMILES and actions
+Evaluation produces two files: `eval_*.txt` has calculated Top K values, `pred_*.txt` contains predicted SMILES and actions.
 
 ### Packed data and models
 
-We include packed pre-processed data, as well as weights of the model trained on USPTO-50k for two variants (reaction type unknown/reaction type given) as a GitHub Release with version number v1.0 in this repo. To use data and pretrained models, unpack the "megan_data.zip" archive in the root directory of the project.
+We include packed pre-processed data, as well as weights of the model trained on USPTO-50k for two variants (reaction type unknown/reaction type given) as a GitHub Release with version number v1.1 in this repo. To use data and pretrained models, unpack the "megan_data.zip" archive in the root directory of the project.

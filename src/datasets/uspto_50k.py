@@ -6,11 +6,10 @@ import logging
 import os
 
 import pandas as pd
-import numpy as np
 from tqdm import tqdm
 
+from src import DATA_DIR
 from src.datasets import Dataset
-from src.datasets.util import download_url
 from src.utils import complete_mappings
 
 logger = logging.getLogger(__name__)
@@ -43,42 +42,45 @@ class Uspto50k(Dataset):
     def key(self) -> str:
         return 'uspto_50k'
 
-    def _download(self):
-        url = "https://raw.githubusercontent.com/connorcoley/retrosim/master/retrosim/data/data_processed.csv"
-        logger.info(f"Downloading raw data from {url}")
-        download_url(url, self.raw_data_path)
-        logger.info(f"File downloaded and unpacked to {self.feat_dir}")
-
-    def _preprocess(self):
-        data_df = pd.read_csv(self.raw_data_path)
-
+    def acquire(self):
         x = {
             'product': [],
             'substrates': []
         }
-
-        for reaction_smiles in tqdm(data_df['rxn_smiles'], total=len(data_df),
-                                    desc="generating product/substrates SMILES'"):
-            subs, prod = tuple(reaction_smiles.split('>>'))
-            subs, prod = complete_mappings(subs, prod)
-            x['substrates'].append(subs)
-            x['product'].append(prod)
-
-        # generate 'default' split
-        split_fracs = [0.8, 0.1, 0.1]
-        split_inds = list(range(len(split_fracs)))
-
-        split_ind = np.random.choice(split_inds, p=split_fracs, size=len(data_df))
         split = {
-            'train': (split_ind == 0).astype(int),
-            'valid': (split_ind == 1).astype(int),
-            'test': (split_ind == 2).astype(int),
+            'train': [],
+            'valid': [],
+            'test': []
+        }
+        meta = {
+            'reaction_type_id': [],
+            'id': []
         }
 
-        meta = {
-            'reaction_type_id': data_df['class'],
-            'patent_id': data_df['id']
-        }
+        for split_key, filename in (('train', 'raw_train.csv'), ('valid', 'raw_val.csv'), ('test', 'raw_test.csv')):
+            data_path = os.path.join(DATA_DIR, f'uspto_50k/{filename}')
+            if not os.path.exists(data_path):
+                raise FileNotFoundError(
+                    f'File not found at: {data_path}. Please download data manually from '
+                    'https://www.dropbox.com/sh/6ideflxcakrak10/AAAESdZq7Y0aNGWQmqCEMlcza/typed_schneider50k '
+                    'and extract to the required location.')
+            data_df = pd.read_csv(data_path)
+
+            for reaction_smiles in tqdm(data_df['reactants>reagents>production'], total=len(data_df),
+                                        desc="generating product/substrates SMILES'"):
+                subs, prod = tuple(reaction_smiles.split('>>'))
+                subs, prod = complete_mappings(subs, prod)
+                x['substrates'].append(subs)
+                x['product'].append(prod)
+
+            for split_key2 in ['train', 'valid', 'test']:
+                if split_key == split_key2:
+                    split[split_key2] += [1 for _ in range(len(data_df))]
+                else:
+                    split[split_key2] += [0 for _ in range(len(data_df))]
+
+            meta['reaction_type_id'] += data_df['class'].tolist()
+            meta['id'] += data_df['id'].tolist()
 
         logger.info(f"Saving 'x' to {self.x_path}")
         pd.DataFrame(x).to_csv(self.x_path, sep='\t')
@@ -90,6 +92,3 @@ class Uspto50k(Dataset):
         logger.info(f"Saving default split to {split_path}")
         pd.DataFrame(split).to_csv(split_path)
 
-    def acquire(self):
-        self._download()
-        self._preprocess()
