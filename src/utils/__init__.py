@@ -147,10 +147,15 @@ def smiles_to_unmapped(smi: str) -> str:
     return smi_unmapped
 
 
-def mol_to_unmapped_smiles(mol: Mol) -> Mol:
+def mol_to_unmapped(mol: Mol) -> Mol:
     mol_copy = Chem.Mol(mol)
     for a in mol_copy.GetAtoms():
         a.ClearProp("molAtomMapNumber")
+    return mol_copy
+
+
+def mol_to_unmapped_smiles(mol: Mol) -> str:
+    mol_copy = mol_to_unmapped(mol)
     smi_unmapped = Chem.MolToSmiles(mol_copy, canonical=True)
     return smi_unmapped
 
@@ -246,7 +251,7 @@ def mark_reactants(source_mol: Mol, target_mol: Mol):
     target_atoms = set(a.GetAtomMapNum() for a in reversed(target_mol.GetAtoms()))
     for a in source_mol.GetAtoms():
         m = a.GetAtomMapNum()
-        if m in target_atoms:
+        if m is not None and m > 0 and m in target_atoms:
             a.SetBoolProp('in_target', True)
 
 

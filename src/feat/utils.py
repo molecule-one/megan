@@ -5,6 +5,7 @@ from typing import Tuple
 
 from rdkit import Chem
 from rdkit.Chem.rdchem import Mol
+import numpy as np
 
 from src.feat.graph_features import try_get_atom_feature
 from src.feat import ATOM_EDIT_TUPLE_KEYS
@@ -23,8 +24,19 @@ def fix_incomplete_mappings(sub_mol: Mol, prod_mol: Mol) -> Tuple[Mol, Mol]:
     return sub_mol, prod_mol
 
 
-def reac_to_canonical(sub_mol, prod_mol):
+def add_map_numbers(mol: Mol) -> Mol:
     # converting to smiles to mol and again to smiles makes atom order canonical
+    mol = Chem.MolFromSmiles(Chem.MolToSmiles(mol))
+
+    map_nums = np.arange(mol.GetNumAtoms()) + 1
+    np.random.shuffle(map_nums)
+
+    for i, a in enumerate(mol.GetAtoms()):
+        a.SetAtomMapNum(int(map_nums[i]))
+    return mol
+
+
+def reac_to_canonical(sub_mol, prod_mol): # converting to smiles to mol and again to smiles makes atom order canonical
     sub_mol = Chem.MolFromSmiles(Chem.MolToSmiles(sub_mol))
     prod_mol = Chem.MolFromSmiles(Chem.MolToSmiles(prod_mol))
 

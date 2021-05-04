@@ -9,6 +9,9 @@ python bin/eval.py model_dir
 import os
 import time
 from collections import Counter
+from typing import Tuple
+
+from rdkit.Chem import Mol
 
 from src import config
 from src.config import get_featurizer
@@ -22,10 +25,10 @@ import argh
 import gin
 import numpy as np
 import torch
-from src.utils import mol_to_unmapped_smiles, renumber_atoms_for_mapping, mark_reactants
+from src.utils import mol_to_unmapped, mol_to_unmapped_smiles, mark_reactants
 from rdkit import Chem
 from tqdm import tqdm
-from src.feat.utils import fix_explicit_hs, reac_to_canonical, fix_incomplete_mappings
+from src.feat.utils import fix_explicit_hs, add_map_numbers
 from itertools import islice
 
 # noinspection PyUnresolvedReferences
@@ -43,13 +46,44 @@ def prediction_is_correct(y_pred: str, y_true: str):
     if not y_pred:
         return False
 
-    pred_subs = Counter(y_pred.split('.'))
-    true_subs = Counter(y_true.split('.'))
+    # order of compounds in SMILES does not matter
+    pred_mols = Counter(y_pred.split('.'))
+    true_mols = Counter(y_true.split('.'))
 
-    for subs in true_subs:
-        if pred_subs[subs] < true_subs[subs]:
+    for mol_smi in true_mols:
+        if pred_mols[mol_smi] != true_mols[mol_smi]:
             return False
     return True
+
+
+def remap_reaction_to_canonical(input_mol: Mol, target_mol: Mol) -> Tuple[Mol, Mol]:
+    """
+    Re-maps reaction according to order of atoms in RdKit - this makes sure that stereochemical SMILES are canonical.
+    Note: this method does not transfer any information from target molecule to the input molecule
+    (the input molecule is mapped according to its order of atoms in its canonical SMILES)
+    """
+
+    # converting Mol to smiles and again to Mol makes atom order canonical
+    input_mol = Chem.MolFromSmiles(Chem.MolToSmiles(input_mol))
+    target_mol = Chem.MolFromSmiles(Chem.MolToSmiles(target_mol))
+
+    map2map = {}
+    for i, a in enumerate(input_mol.GetAtoms()):
+        map2map[int(a.GetAtomMapNum())] = i + 1
+        a.SetAtomMapNum(i + 1)
+
+    max_map = max(map2map.values())
+
+    for i, a in enumerate(target_mol.GetAtoms()):
+        old_map = int(a.GetAtomMapNum())
+        if old_map in map2map:
+            new_map = map2map[old_map]
+        else:
+            new_map = max_map + 1
+            max_map += 1
+        a.SetAtomMapNum(new_map)
+
+    return input_mol, target_mol
 
 
 def evaluate_megan(save_path: str, beam_size: int = 10, max_gen_steps: int = 16, beam_batch_size: int = 10,
@@ -133,19 +167,16 @@ def evaluate_megan(save_path: str, beam_size: int = 10, max_gen_steps: int = 16,
             try:
                 target_mol = Chem.MolFromSmiles(target_mapped)
                 input_mol = Chem.MolFromSmiles(input_mapped)
-                target_mol, input_mol = fix_incomplete_mappings(target_mol, input_mol)
 
-                target_mol, input_mol = reac_to_canonical(target_mol, input_mol)
-                input_mol = fix_explicit_hs(input_mol)
-                target_mol = fix_explicit_hs(target_mol)
-
-                # renumber atoms so they are in same order as map numbers
-                input_mol = renumber_atoms_for_mapping(input_mol)
-                target_mol = renumber_atoms_for_mapping(target_mol)
-
-                # mark reactants (for models that use such information)
+                # mark reactants (this is used only by models that use such information)
                 if featurizer.forward:
                     mark_reactants(input_mol, target_mol)
+
+                # remap input and target molecules according to canonical SMILES atom order
+                input_mol, target_mol = remap_reaction_to_canonical(input_mol, target_mol)
+
+                # fix a bug in marking explicit Hydrogen atoms by RdKit
+                input_mol = fix_explicit_hs(input_mol)
 
             except Exception as e:
                 logger.warning(f'Exception while input mol to SMILES {str(e)}')
@@ -156,23 +187,6 @@ def evaluate_megan(save_path: str, beam_size: int = 10, max_gen_steps: int = 16,
                 input_mols.append(None)
                 target_mols.append(None)
                 continue
-
-            # re-map reaction
-            map2map = {}
-            for i, a in enumerate(input_mol.GetAtoms()):
-                map2map[int(a.GetAtomMapNum())] = i + 1
-                a.SetAtomMapNum(i + 1)
-
-            max_map = max(map2map.values())
-
-            for i, a in enumerate(target_mol.GetAtoms()):
-                old_map = int(a.GetAtomMapNum())
-                if old_map in map2map:
-                    new_map = map2map[old_map]
-                else:
-                    new_map = max_map + 1
-                    max_map += 1
-                a.SetAtomMapNum(new_map)
 
             input_mols.append(input_mol)
             target_mols.append(target_mol)
@@ -213,23 +227,23 @@ def evaluate_megan(save_path: str, beam_size: int = 10, max_gen_steps: int = 16,
                 for i, path in enumerate(results):
                     if path['final_smi_unmapped']:
                         try:
-                            # this fixes canonicality of chirality
                             final_mol = Chem.MolFromSmiles(path['final_smi_unmapped'])
 
                             if final_mol is None:
                                 final_smi = path['final_smi_unmapped']
                             else:
-                                # make atom mapping order canonical
-                                final_mol, input_mol = reac_to_canonical(final_mol, input_mol)
-                                final_mol = fix_explicit_hs(final_mol)
-
-                                # renumber atoms so they are in same order as map numbers
-                                final_mol = renumber_atoms_for_mapping(final_mol)
+                                input_mol, final_mol = remap_reaction_to_canonical(input_mol, final_mol)
                                 final_smi = mol_to_unmapped_smiles(final_mol)
+
                         except Exception as e:
                             final_smi = path['final_smi_unmapped']
                     else:
                         final_smi = path['final_smi_unmapped']
+
+                    # for forward prediction, if we generate more than 1 product we heuristically select the biggest one
+                    if predict_forward:
+                        final_smi = list(sorted(final_smi.split('.'), key=len))
+                        final_smi = final_smi[-1]
 
                     str_actions = '|'.join(f"({str(a)};{p})" for a, p in path['actions'])
                     str_ch = '{' + ','.join([str(c) for c in path['changed_atoms']]) + '}'
