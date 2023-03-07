@@ -16,7 +16,12 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 
 def to_one_hot(x, dims: int):
-    one_hot = torch.FloatTensor(*x.shape, dims).zero_().to(device)
+    # suggested in https://github.com/molecule-one/megan/issues/8
+    if torch.cuda.is_available():
+        one_hot = torch.cuda.FloatTensor(*x.shape, dims).zero_()
+    else:
+        one_hot = torch.FloatTensor(*x.shape, dims).zero_().to(device)
+
     x = torch.unsqueeze(x, -1)
     target = one_hot.scatter_(x.dim() - 1, x.data, 1)
 
